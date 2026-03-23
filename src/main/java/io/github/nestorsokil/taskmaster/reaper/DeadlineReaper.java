@@ -24,7 +24,7 @@ public class DeadlineReaper {
     public void reap() {
         var deadLettered = taskRepository.deadlineExpired();
         if (!deadLettered.isEmpty()) {
-            metrics.taskDeadLetteredBatch("deadline", deadLettered.size());
+            deadLettered.forEach(task -> metrics.taskDeadLettered(task.queueName(), "deadline"));
             log.warn("Dead-lettered {} task(s) past their deadline", deadLettered.size());
             deadLettered.forEach(webhookService::deliverIfConfigured);
         }

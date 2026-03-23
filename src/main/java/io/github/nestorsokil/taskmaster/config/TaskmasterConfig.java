@@ -1,7 +1,15 @@
 package io.github.nestorsokil.taskmaster.config;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.typesafe.config.ConfigFactory;
 
+import java.io.IOException;
 import java.time.Duration;
 
 public record TaskmasterConfig(
@@ -13,23 +21,16 @@ public record TaskmasterConfig(
         Webhook webhook
 ) {
 
-    public static TaskmasterConfig load() {
-        var root       = ConfigFactory.load().getConfig("taskmaster");
-        var dbConf     = root.getConfig("db");
-        var hbConf     = root.getConfig("heartbeat");
-        var reaperConf = root.getConfig("reaper");
-        var retryConf  = root.getConfig("retry");
-        var retConf    = root.getConfig("retention");
-        var whConf     = root.getConfig("webhook");
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .setPropertyNamingStrategy(PropertyNamingStrategies.KEBAB_CASE)
+            .registerModule(new JavaTimeModule())
+            .registerModule(new SimpleModule().addDeserializer(Duration.class, new HoconDurationDeserializer()));
 
-        return new TaskmasterConfig(
-                new Db(dbConf.getString("url"), dbConf.getString("username"), dbConf.getString("password")),
-                new Heartbeat(hbConf.getLong("stale-threshold-seconds"), hbConf.getLong("dead-threshold-seconds")),
-                new Reaper(reaperConf.getLong("interval-ms")),
-                new Retry(retryConf.getDouble("base-delay-seconds")),
-                new Retention(retConf.getDuration("ttl"), retConf.getLong("interval-ms"), retConf.getInt("batch-size")),
-                new Webhook(whConf.getString("hmac-secret"), whConf.getInt("http-timeout-seconds"))
-        );
+    public static TaskmasterConfig load() {
+        return MAPPER.convertValue(ConfigFactory
+            .load().getConfig("taskmaster")
+            .root().unwrapped(), 
+            TaskmasterConfig.class);
     }
 
     public record Db(String url, String username, String password) {}
@@ -46,6 +47,17 @@ public record TaskmasterConfig(
         public Webhook {
             if (hmacSecret == null) hmacSecret = "";
             if (httpTimeoutSeconds <= 0) httpTimeoutSeconds = 10;
+        }
+    }
+
+    private static final class HoconDurationDeserializer extends StdDeserializer<Duration> {
+        private HoconDurationDeserializer() {
+            super(Duration.class);
+        }
+
+        @Override
+        public Duration deserialize(JsonParser p, DeserializationContext ctxt)throws IOException {
+            return ConfigFactory.parseString("ttl = " + p.getValueAsString()).getDuration("ttl");
         }
     }
 }
