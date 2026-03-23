@@ -59,17 +59,21 @@ public class HeartbeatReaper {
             // Step 3: requeue RUNNING tasks owned by dead workers (or dead-letter if exhausted)
             var affected = taskRepository.withDsl(tx).requeueOrMarkDeadFromDeadWorkers(deadWorkerIds);
 
-            int requeueCount    = (int) affected.stream().filter(t -> "PENDING".equals(t.status())).count();
-            int deadLetterCount = (int) affected.stream().filter(t -> "DEAD".equals(t.status())).count();
-            metrics.tasksRequeued("worker_dead", requeueCount);
-            metrics.taskDeadLetteredBatch("worker_dead", deadLetterCount);
-            if (requeueCount > 0) {
-                log.info("Requeued {} task(s) from dead workers", requeueCount);
+            int requeueCount = 0;
+
+            for (var task : affected) {
+                if ("PENDING".equals(task.status())) {
+                    requeueCount++;
+                    continue;
+                }
+                metrics.taskDeadLettered(task.queueName(), "worker_dead");
+                webhookService.deliverIfConfigured(task);
             }
 
-            affected.stream()
-                    .filter(t -> "DEAD".equals(t.status()))
-                    .forEach(webhookService::deliverIfConfigured);
+            if (requeueCount > 0) {
+                metrics.tasksRequeued("worker_dead", requeueCount);
+                log.info("Requeued {} task(s) from dead workers", requeueCount);
+            }
         });
     }
 }

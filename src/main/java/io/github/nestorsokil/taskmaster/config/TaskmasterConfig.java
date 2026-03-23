@@ -3,6 +3,7 @@ package io.github.nestorsokil.taskmaster.config;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -21,6 +22,7 @@ public record TaskmasterConfig(
 ) {
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
+            .setPropertyNamingStrategy(PropertyNamingStrategies.KEBAB_CASE)
             .registerModule(new JavaTimeModule())
             .registerModule(new SimpleModule().addDeserializer(Duration.class, new HoconDurationDeserializer()));
 
